@@ -1,0 +1,120 @@
+---
+title: "Project3"
+author: "Leithe, Martinussen & Saghagen"
+date: "November, 2017"
+output: #3rd letter intentation hierarchy
+#  beamer_presentation:
+###    incremental: true # or >* for one at a time
+#  slidy_presentation:
+#    font_adjustment: +1  
+  prettydoc::html_pretty:
+    theme: architect
+    highlight: github
+#   pdf_document:
+#    toc: true
+#    toc_depth: 2
+#    engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,tidy = TRUE, message = FALSE, warning = FALSE)
+library(ggplot2, quietly = TRUE, warn.conflicts = FALSE)
+library(faraway, quietly = TRUE, warn.conflicts = FALSE)
+library(GGally, quietly = TRUE, warn.conflicts = FALSE)
+library(devtools, quietly = TRUE, warn.conflicts = FALSE)
+library(MASS, quietly = TRUE, warn.conflicts = FALSE)
+library(sjPlot, quietly = TRUE, warn.conflicts = FALSE)
+library(ggpubr, quietly = TRUE, warn.conflicts = FALSE)
+library(lme4,quietly = TRUE, warn.conflicts = FALSE)
+```
+
+
+```{r, quietly=TRUE}
+data(jsp, package = "faraway")
+sjsp <- jsp[jsp$year == 0, ]
+sjsp <- sjsp[, -c(6, 7, 9)]  # removing class, id, english and year as they are not used
+school= sjsp$school
+class = sjsp$class
+gender = sjsp$gender
+social = sjsp$social
+raven = sjsp$raven
+math = sjsp$math
+```
+
+
+## a)
+`ggpairs` schatter plot of the data grouped using `gender` and the covariates `social`, `raven` and `math` included. 
+````{r}
+ggpairs(sjsp, columns=c(4,5,6), mapping=aes(col=gender),legend=1)
+````
+We fit a linear model with `math` as response, and `raven` and `gender` as covariates
+````{r}
+fit = lm(math~raven+gender)
+fit$coefficients
+````
+
+## b)
+Measurement model for school $i$:
+$$
+\mathbf{Y}_i = \mathbf{X}_i \beta + \gamma_{0i} + \varepsilon_i
+$$
+
+* $\mathbf{Y}_i: n_i \times 1$ random vector of responses
+* $\mathbf{X}_i: n_i \times p$ design matrix
+* $\gamma_{0i}$: deviation from the population intercept, random variable
+* $\varepsilon_i:$
+
+Distributional assumptions for $\gamma_{0i}$ and $\varepsilon_i$:
+$$
+\gamma_{0i} \sim N(0,\tau^2_0) \quad \varepsilon \sim N(0, \sigma^2)
+$$
+Observations from different schools are independent. 
+````{r}
+fitRIa <- lmer(math ~ raven + gender + (1 | school), data = sjsp)
+summary(fitRIa)
+````
+
+````{r,echo=FALSE}
+coefs = data.frame(coef(summary(fitRIa)))
+confinterval = confint(fitRIa)
+````
+
+````{r}
+pvalue_raven <- 2 * pnorm(abs(coefs$t.value[3]), lower.tail = FALSE)
+pvalue_rave
+femaleconf = confinterval[5,]
+femaleconf
+````
+
+## c)
+$$
+Corr(Y_{ij},Y_{il})=\frac{Cov(Y_{ij},Y_{il})}{\sqrt{Var(Y_{ij}Var_{il})}} = \frac{\tau^2_0}{\tau^2_0+\sigma^2}\: \text{for} j\neq i
+$$
+```{r}
+fitRI <- lmer(math ~ raven + (1 | school), data = sjsp)
+summary(fitRI)
+```
+
+```{r, echo=FALSE}
+randomvar = as.data.frame(VarCorr(fitRI))[,4]
+```
+
+```{r}
+corr = randomvar[1]/(randomvar[1]+randomvar[2])
+corr
+```
+Predicted value for the random intercept:
+$$
+\hat{\gamma_{0i}} = \mathbf{\hat{Q}}\mathbf{U}^T_i\mathbf{\hat{V}}^{-1}_i(\mathbf{Y}_i-\mathbf{X}_i\hat{\beta})
+$$
+
+* $U_i: n_i \times (q+1)$ is the design matrix for random effects
+* $V_i = Cov(U_i\gamma_i)+Cov(\varepsilon_i)$
+
+## d)
+```{r}
+fitRIb <- lmer(math ~ raven + social + (1 | school), data = sjsp)
+anova(fitRI, fitRIb)
+```
+
+## e)
