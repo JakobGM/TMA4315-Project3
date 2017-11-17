@@ -1,5 +1,5 @@
 ---
-title: "Project3"
+title: "Compulsory exercise 3: (Generalized) Linear Mixed Models"
 author: "Leithe, Martinussen & Saghagen"
 date: "November, 2017"
 output: #3rd letter intentation hierarchy
@@ -28,12 +28,16 @@ library(ggpubr, quietly = TRUE, warn.conflicts = FALSE)
 library(lme4,quietly = TRUE, warn.conflicts = FALSE)
 ```
 
-
+We import the data set.
 ```{r, quietly=TRUE}
 data(jsp, package = "faraway")
 sjsp <- jsp[jsp$year == 0, ]
-sjsp <- sjsp[, -c(6, 7, 9)]  # removing class, id, english and year as they are not used
-school= sjsp$school
+
+# removing class, id, english and year as they are not used
+sjsp <- sjsp[, -c(6, 7, 9)]  
+
+# Easier references to covariates
+school = sjsp$school
 class = sjsp$class
 gender = sjsp$gender
 social = sjsp$social
@@ -43,15 +47,27 @@ math = sjsp$math
 
 
 ## a)
-`ggpairs` schatter plot of the data grouped using `gender` and the covariates `social`, `raven` and `math` included. 
-````{r}
-ggpairs(sjsp, columns=c(4,5,6), mapping=aes(col=gender),legend=1)
-````
+`ggpairs` scatter plot of the data grouped using `gender` and the covariates `social`, `raven` and `math` included. 
+```{r}
+ggpairs(sjsp, columns=c(4,5,6), mapping=aes(col=gender,alpha = 0.5),legend=1)
+```
+
+One of the strongest correlations is observed between `math` and `raven`, the correlation is positive and a bit stronger for girls compared to boys. There is no visible correlation between `social`/`gender` and `math` in this plot. 
+
+* $\mathbf{Y}_k$: Expected math score for student $k$, according to the linear model. 
+* $\mathbf{X}_k$: Row $k$ of the design matrix, containing the covariates `raven` and `math` for student $k$.
+* $\mathbf{\beta}:$ The fitted coefficient vector of the linear model. 
+* $\varepsilon_k$: The error term normally distributed with mean $0$ and variance $\sigma²$. 
+
 We fit a linear model with `math` as response, and `raven` and `gender` as covariates
-````{r}
+```{r}
 fit = lm(math~raven+gender)
 fit$coefficients
-````
+```
+People with higher raven scores tend have higher math scores, and girls are expected to do better than boys.
+
+We are investigating the effect which the raven score and gender has on the math score of individual students.
+
 
 ## b)
 Measurement model for school $i$:
@@ -59,10 +75,10 @@ $$
 \mathbf{Y}_i = \mathbf{X}_i \beta + \gamma_{0i} + \varepsilon_i
 $$
 
-* $\mathbf{Y}_i: n_i \times 1$ random vector of responses
-* $\mathbf{X}_i: n_i \times p$ design matrix
-* $\gamma_{0i}$: deviation from the population intercept, random variable
-* $\varepsilon_i:$
+* $\mathbf{Y}_i: random vector of responses for school $i$.
+* $\mathbf{X}_i: n_i \times 3$ design matrix for the $n_i$ students of school $i$.
+* $\gamma_{0i}$: $n_i \times 1$ Random variable deviation from the population intercept for school $i$.
+* $\varepsilon_i$: $n_i \times 1$ vector of normally distributed error terms with mean $0$ and variance $\sigma²$. 
 
 Distributional assumptions for $\gamma_{0i}$ and $\varepsilon_i$:
 $$
@@ -74,47 +90,112 @@ fitRIa <- lmer(math ~ raven + gender + (1 | school), data = sjsp)
 summary(fitRIa)
 ````
 
-````{r,echo=FALSE}
-coefs = data.frame(coef(summary(fitRIa)))
-confinterval = confint(fitRIa)
-````
+In the random intercept model we observe that estimated effect of the raven score is approximately the same, and the effect of gender is estimated to be smaller, but not significantly. Some of the effect effect previously attributed to gender seems to be better explained by the school of attendance. The good schools might for instance have a greater proportion of girls.  
 
-````{r}
-pvalue_raven <- 2 * pnorm(abs(coefs$t.value[3]), lower.tail = FALSE)
-pvalue_rave
-femaleconf = confinterval[5,]
+When we introduce the concept of grouped random intercepts, the marginal distribution becomes hard to deduce. Since $p$-value tests are dependent on this distribution, it is not included in the summary. 
+
+We now perform an asymptotic hypothesis test to check if $\beta_{\text{raven}}$ is non-zero. 
+
+```{r}
+coefs = data.frame(coef(summary(fitRIa)))
+pvalue_raven <- 2 * pnorm(abs(coefs$t.value[2]), lower.tail = FALSE)
+pvalue_raven
+```
+This $p$-value is a strong indicator of $\beta_{\text{raven}}$ being non-zero. 
+
+We now provide a 95% confidence interval for `gendergirl`.
+```{r}
+confinterval = confint(fitRIa)
+femaleconf = confinterval['gendergirl',]
 femaleconf
-````
+```
+The confidence interval includes zero, so the effect of gender is not sure to be present with 95% confidence.
 
 ## c)
-$$
-Corr(Y_{ij},Y_{il})=\frac{Cov(Y_{ij},Y_{il})}{\sqrt{Var(Y_{ij}Var_{il})}} = \frac{\tau^2_0}{\tau^2_0+\sigma^2}\: \text{for} j\neq i
-$$
+We now fit a random intercept model with only `raven` as fixed effect.
 ```{r}
 fitRI <- lmer(math ~ raven + (1 | school), data = sjsp)
 summary(fitRI)
 ```
-
-```{r, echo=FALSE}
-randomvar = as.data.frame(VarCorr(fitRI))[,4]
-```
-
+The mathematical formulas for correlation and covariance are
+$$
+Cov(Y_{ij},Y_{il}) = \tau_0², \\
+Corr(Y_{ij},Y_{il}) = \frac{Cov(Y_{ij},Y_{il})}{\sqrt{Var(Y_{ij})Var(Y_{il})}} = \frac{\tau^2_0}{\tau^2_0+\sigma^2}\: \text{ for } j\neq l.
+$$
+We now find the correlation for our fitted model. 
 ```{r}
+randomvar = as.data.frame(VarCorr(fitRI))[,4]
 corr = randomvar[1]/(randomvar[1]+randomvar[2])
 corr
 ```
+There is a small positive correlation, which means that if that if your peers at the same school get a high score, you are more likely to get a high score too. Thus, school seems to have an effect on the math score. 
+
 Predicted value for the random intercept:
 $$
-\hat{\gamma_{0i}} = \mathbf{\hat{Q}}\mathbf{U}^T_i\mathbf{\hat{V}}^{-1}_i(\mathbf{Y}_i-\mathbf{X}_i\hat{\beta})
+\hat{\gamma_{0i}} = \frac{n_i \hat{\tau}_{0i}}{\hat{\sigma}² + n_i \hat{\tau}_{0i}^2}e_i
 $$
 
-* $U_i: n_i \times (q+1)$ is the design matrix for random effects
-* $V_i = Cov(U_i\gamma_i)+Cov(\varepsilon_i)$
+* $n_i$: Number of students at school $i$.
+* $\hat{\tau}_{0i}$: The estimated variance of the deviation from the population intercept $\gamma_{0i}$.
+* $\hat{\sigma}^2$ The estimated variance of the error terms $\varepsilon$. 
+* $e_i$: The average residual for school $i$-
+
+```{r}
+library(ggplot2)
+library(sjPlot)
+gg1 <- plot_model(fitRI, type = "re", sort.est = "(Intercept)", y.offset = 0.4, dot.size = 1.5) + theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+gg2 <- sjp.lmer(fitRI, type = "ri.slope", vars = "raven", prnt.plot = FALSE)
+gg3 <- sjp.lmer(fitRI, type = "re.qq", prnt.plot = FALSE)
+gg4 <- ggplot() + geom_density(aes(x = ranef(fitRI)$school[[1]])) + labs(x = "x", y = "y", title = "Density")
+df <- data.frame(fitted = fitted(fitRI), resid = residuals(fitRI, scaled = TRUE))
+gg5 <- ggplot(df, aes(fitted,resid)) + geom_point(pch = 21) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_smooth(se = FALSE, col = "red", size = 0.5, method = "loess") +
+  labs(x = "Fitted values", y = "Residuals", title = "Residuals vs Fitted values")
+gg6 <- ggplot(df, aes(sample=resid)) + stat_qq(pch = 19) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dotted") +
+  labs(x = "Theoretical quantiles", y = "Standardized residuals", title = "Normal Q-Q")
+
+library(ggpubr)
+ggarrange(gg1, gg3$plot, gg4, gg5, gg6)
+gg2$plot[[1]]
+```
+
+* Plot 1: Predicted deviance from the population intercept with confidence interval, sorted by value and colored by sign. Used to check if we have an different realisations of the random intercept between the schools, approximately equal amount positive and negative. 
+* Plot 2: Q-Q-plot of the predicted deviance from the population intercept with confidence intervals. Used to check the normality assumption of the deviences. 
+* Plot 3: The marginal distribution of the predicted deviences from the population intercept. Uesd to confirmed bell shape.
+* Plot 4: Plotting the residuals against fitted values. Used to check independence between residuals and expected value. 
+* Plot 5: Q-Q-plot of the standardized residuals. Used to check the normality assumption of the error terms. 
+* Plot 6: Regression line for each school, portraying the different intercepts. Illustration of the effect of school. 
+
+The summarized conclusion of these plots seems to be that the distributional assumptions for $\gamma_{0i}$ and $\varepsilon$ are correct. 
 
 ## d)
+We now fit a model including the social status of the father as a fixed effect. 
 ```{r}
 fitRIb <- lmer(math ~ raven + social + (1 | school), data = sjsp)
 anova(fitRI, fitRIb)
 ```
+The anova test concludes that the effect of the fathers social status is significant (and should be added to the model according to the AIC criterion), but the increased model complexity is not defendable according to the BIC criterion. We prefer the bigger model as the effect is significant and the model is still quite simple.
+$$
+\mathbf{Y}_{ij} = \beta_0 + \gamma_{0i} + (\beta_1 + \gamma_{1i})x_{ij} + \varepsilon_{ij}
+$$
+```{r}
+fitRIS <- lmer(math ~ raven + (1 + raven | school), data = sjsp)
+gg1 <- sjp.lmer(fitRIS, type = "rs.ri", prnt.plot = FALSE)
+gg2 <- sjp.lmer(fitRIS, sort.est = "(Intercept)", prnt.plot = FALSE, facet.grid = FALSE, 
+    title = names(ranef(fitRIS)$school), geom.size = 1.5)
+ggarrange(gg1$plot[[1]], gg2$plot.list[[1]], gg2$plot.list[[2]] + labs(x = ""), 
+    ncol = 3, widths = c(2, 1, 1))
+```
+
+Greater intercept is correlated with a lower slope. This means that a school which is better at teaching math to students with low raven scores don't necessarily manage to apply the same degree of improvement to their students with higher raven scores. 
 
 ## e)
+We now want to model the probability of failing maths. Since the response variable now is binary, a linear mixed model is no longer suitable. A binary regression is a better approach.
+
+The random intercept is added to the linear predictor in order to add a random school intercept. 
+
+When a random intercept is added, the marginal distribution can not easily be expressed analytically. This makes inference difficult. 
+
+
